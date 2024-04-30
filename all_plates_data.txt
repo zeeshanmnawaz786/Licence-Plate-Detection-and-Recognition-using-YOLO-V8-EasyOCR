@@ -1,0 +1,4 @@
+Plate: 5723HSD, Speed: 40.25 km/h
+Plate: 2193BJB, Speed: 86.80 km/h
+Plate: 6896FMP, Speed: 112.50 km/h
+Plate: 7207DHR, Speed: 78.40 km/h

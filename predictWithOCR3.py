@@ -10,26 +10,35 @@ from ultralytics.yolo.utils.checks import check_imgsz
 from ultralytics.yolo.utils.plotting import Annotator, colors, save_one_box
 
 def getOCR(im, coors):
-    x,y,w, h = int(coors[0]), int(coors[1]), int(coors[2]),int(coors[3])
-    im = im[y:h,x:w]
+    x, y, w, h = int(coors[0]), int(coors[1]), int(coors[2]), int(coors[3])
+    im = im[y:h, x:w]
     conf = 0.2
 
-    gray = cv2.cvtColor(im , cv2.COLOR_RGB2GRAY)
+    gray = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
     results = reader.readtext(gray)
     ocr = ""
 
     for result in results:
         if len(results) == 1:
             ocr = result[1]
-        if len(results) >1 and len(results[1])>6 and results[2]> conf:
+        if len(results) > 1 and len(result[1]) > 6 and result[2] > conf:
             ocr = result[1]
-    
+
+    # Trim whitespace from OCR result and remove spaces
+    ocr = ocr.strip().replace(" ", "")
+
     return str(ocr)
 
 class DetectionPredictor(BasePredictor):
     def __init__(self, cfg):
         super().__init__(cfg)
         self.tracker = cv2.TrackerKCF_create()
+        self.plates_file = open('all_plates_data.txt', 'a')  # Open the file in append mode
+        self.detected_plates = set()
+
+    def __del__(self):
+        if hasattr(self, 'plates_file'):
+            self.plates_file.close()
 
     def get_annotator(self, img):
         return Annotator(img, line_width=self.args.line_thickness, example=str(self.model.names))
@@ -73,11 +82,10 @@ class DetectionPredictor(BasePredictor):
 
     def write_results(self, idx, preds, batch):
         p, im, im0 = batch
-
         bbox_prev = None
-        time_interval = 1  # Example time interval between frames (1 second)
-
+        time_interval = 1
         log_string = ""
+
         if len(im.shape) == 3:
             im = im[None]  # expand for batch dim
         self.seen += 1
@@ -105,25 +113,24 @@ class DetectionPredictor(BasePredictor):
         gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
         
         speed = None  # Initialize speed variable
-
-            # Define a dictionary to store detected plates and their speeds
-        detected_plates = {}
-
-        # Inside your loop where you process detections
+   
         for *xyxy, conf, cls in reversed(det):
             if bbox_prev is not None:
                 bbox_curr = [xyxy[0], xyxy[1], xyxy[2] - xyxy[0], xyxy[3] - xyxy[1]]
                 ocr = getOCR(im0, xyxy)
-                if ocr in detected_plates:
-                    # Plate already detected, ignore it
-                    continue
-                elif ocr in ["5723 HSD", "2193BJB", "'0791 DVL", "6061 GEC", "6896 FMP", "7207 DHR"]:
+                if ocr and ocr not in self.detected_plates and ocr in ["5723HSD", "2193BJB", "0791DVL", "6061GEC", "6896FMP", "7207DHR"]:
                     speed = self.get_speed(bbox_prev, bbox_curr, time_interval)
                     print(f"Vehicle with plate {ocr}: {speed} km/h")
-                    # Add plate to detected plates dictionary
-                    detected_plates[ocr] = speed
+
+                    # Add plate to detected plates set
+                    self.detected_plates.add(ocr)
+
+                    # Write plate and speed information to .txt file
+                    self.plates_file.write(f"Plate: {ocr}, Speed: {speed:.2f} km/h\n")
+                    self.plates_file.flush()  # Ensure data is written to file immediately
 
             bbox_prev = [xyxy[0], xyxy[1], xyxy[2] - xyxy[0], xyxy[3] - xyxy[1]]
+
 
             if self.args.save_txt:  # Write to file
                 xywh = (ops.xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
@@ -137,7 +144,7 @@ class DetectionPredictor(BasePredictor):
                     self.model.names[c] if self.args.hide_conf else f'{self.model.names[c]} {conf:.2f}')
                 ocr = getOCR(im0,xyxy)
                 if ocr != "":
-                    # print("Detected Number Plate:", ocr)  # Print the detected number plate
+                    print("Detected Number Plate:", ocr)  # Print the detected number plate
                     label = ocr
                 # Add speed annotation
                 label += f", Speed: {speed:.2f} km/h" if speed is not None else ""

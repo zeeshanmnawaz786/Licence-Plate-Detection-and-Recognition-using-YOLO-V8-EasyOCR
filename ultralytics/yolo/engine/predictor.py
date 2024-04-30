@@ -186,11 +186,11 @@ class BasePredictor:
                 if self.webcam:
                     path, im0s = path[i], im0s[i]
                 p = Path(path)
-                s += self.write_results(i, preds, (p, im, im0s))
+                # s += self.write_results(i, preds, (p, im, im0s))
 
-            #                    s = ""
-            # if len(preds) > 0:
-            #     s += self.write_results(i, preds, (p, im, im0s))
+                s = ""
+                if len(preds) > 0:
+                    s += self.write_results(i, preds, (p, im, im0s))
 
                 if self.args.show:
                     self.show(p)
